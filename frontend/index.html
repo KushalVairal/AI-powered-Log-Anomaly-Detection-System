@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Log Anomaly Detection — Dashboard</title>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0d1117;
+    --bg2:       #161b22;
+    --bg3:       #21262d;
+    --border:    #30363d;
+    --text:      #e6edf3;
+    --text2:     #8b949e;
+    --text3:     #6e7681;
+    --green:     #3fb950;
+    --green-bg:  rgba(63,185,80,0.1);
+    --red:       #f85149;
+    --red-bg:    rgba(248,81,73,0.1);
+    --amber:     #e3b341;
+    --amber-bg:  rgba(227,179,65,0.1);
+    --blue:      #58a6ff;
+    --blue-bg:   rgba(88,166,255,0.1);
+    --purple:    #bc8cff;
+    --mono:      'JetBrains Mono', monospace;
+    --sans:      'Inter', sans-serif;
+  }
+
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+  /* Layout */
+  .topbar { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .topbar-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; letter-spacing: -.3px; }
+  .brand-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--red); box-shadow: 0 0 8px var(--red); animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .topbar-status { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text2); }
+  .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); }
+
+  .layout { display: grid; grid-template-columns: 220px 1fr; min-height: calc(100vh - 56px); }
+
+  /* Sidebar */
+  .sidebar { background: var(--bg2); border-right: 1px solid var(--border); padding: 20px 12px; }
+  .nav-section { margin-bottom: 24px; }
+  .nav-label { font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .8px; padding: 0 10px; margin-bottom: 6px; }
+  .nav-item { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-radius: 6px; cursor: pointer; font-size: 13.5px; color: var(--text2); transition: all .15s; margin-bottom: 2px; }
+  .nav-item:hover { background: var(--bg3); color: var(--text); }
+  .nav-item.active { background: rgba(88,166,255,.12); color: var(--blue); }
+  .nav-icon { width: 16px; height: 16px; flex-shrink: 0; }
+  .nav-badge { margin-left: auto; background: var(--red-bg); color: var(--red); font-size: 11px; font-weight: 600; padding: 1px 7px; border-radius: 10px; font-family: var(--mono); }
+
+  /* Main */
+  .main { padding: 28px 32px; overflow: auto; }
+  .page-title { font-size: 20px; font-weight: 600; margin-bottom: 6px; }
+  .page-sub { color: var(--text2); font-size: 13.5px; margin-bottom: 28px; }
+
+  /* Stat cards */
+  .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px; margin-bottom: 28px; }
+  .stat-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 18px 20px; }
+  .stat-label { font-size: 12px; color: var(--text3); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 8px; }
+  .stat-value { font-size: 28px; font-weight: 600; font-family: var(--mono); line-height: 1; }
+  .stat-sub { font-size: 12px; color: var(--text2); margin-top: 6px; }
+  .stat-card.danger .stat-value { color: var(--red); }
+  .stat-card.warning .stat-value { color: var(--amber); }
+  .stat-card.success .stat-value { color: var(--green); }
+  .stat-card.info .stat-value { color: var(--blue); }
+
+  /* Charts row */
+  .charts-row { display: grid; grid-template-columns: 1fr 280px; gap: 16px; margin-bottom: 28px; }
+  .chart-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 20px; }
+  .chart-title { font-size: 13px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 16px; }
+
+  /* Timeline chart */
+  .timeline-bars { display: flex; align-items: flex-end; gap: 4px; height: 80px; }
+  .tbar-wrap { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 3px; }
+  .tbar { width: 100%; border-radius: 3px 3px 0 0; transition: opacity .15s; cursor: pointer; min-height: 2px; }
+  .tbar:hover { opacity: .75; }
+  .tbar-label { font-size: 10px; color: var(--text3); font-family: var(--mono); }
+  .tbar.normal { background: var(--blue); }
+  .tbar.anomaly { background: var(--red); }
+
+  /* Donut */
+  .donut-wrap { position: relative; width: 120px; height: 120px; margin: 0 auto 16px; }
+  .donut-center { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .donut-pct { font-size: 22px; font-weight: 600; font-family: var(--mono); color: var(--red); }
+  .donut-sub-text { font-size: 11px; color: var(--text3); }
+  .legend-item { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; font-size: 13px; }
+  .legend-dot { width: 8px; height: 8px; border-radius: 2px; flex-shrink: 0; }
+  .legend-name { color: var(--text2); flex: 1; }
+  .legend-val { font-family: var(--mono); font-size: 12px; }
+
+  /* Log table */
+  .table-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; overflow: hidden; }
+  .table-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--border); }
+  .table-title { font-size: 13px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: .6px; }
+  .table-filters { display: flex; gap: 8px; }
+  .filter-btn { background: var(--bg3); border: 1px solid var(--border); color: var(--text2); border-radius: 6px; padding: 5px 12px; font-size: 12px; cursor: pointer; font-family: var(--sans); transition: all .15s; }
+  .filter-btn:hover, .filter-btn.active { background: var(--blue-bg); border-color: var(--blue); color: var(--blue); }
+
+  table { width: 100%; border-collapse: collapse; }
+  thead { background: var(--bg3); }
+  th { padding: 10px 16px; text-align: left; font-size: 11px; font-weight: 600; color: var(--text3); text-transform: uppercase; letter-spacing: .6px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  td { padding: 11px 16px; font-size: 13px; border-bottom: 1px solid var(--border); }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255,255,255,.02); }
+  tr.anomaly-row td { background: rgba(248,81,73,.04); }
+
+  .level-badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; font-family: var(--mono); white-space: nowrap; }
+  .level-INFO    { background: var(--blue-bg);  color: var(--blue);  }
+  .level-DEBUG   { background: var(--bg3);       color: var(--text3); }
+  .level-WARN    { background: var(--amber-bg);  color: var(--amber); }
+  .level-ERROR   { background: var(--red-bg);    color: var(--red);   }
+  .level-FATAL   { background: var(--red-bg);    color: var(--red);   }
+
+  .anomaly-badge { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; font-family: var(--mono); }
+  .anomaly-badge.yes { background: var(--red-bg); color: var(--red); }
+  .anomaly-badge.no  { background: var(--green-bg); color: var(--green); }
+
+  .score-bar-wrap { display: flex; align-items: center; gap: 8px; }
+  .score-bar { height: 4px; border-radius: 2px; background: var(--bg3); width: 60px; overflow: hidden; }
+  .score-fill { height: 100%; border-radius: 2px; transition: width .3s; }
+  .score-val { font-family: var(--mono); font-size: 12px; color: var(--text2); width: 36px; }
+
+  .ts { font-family: var(--mono); font-size: 12px; color: var(--text3); white-space: nowrap; }
+  .source { font-family: var(--mono); font-size: 12px; color: var(--purple); }
+  .msg { max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text2); }
+
+  /* Ingest panel */
+  .ingest-panel { background: var(--bg2); border: 1px solid var(--border); border-radius: 10px; padding: 20px; margin-bottom: 28px; }
+  .ingest-row { display: flex; gap: 8px; align-items: flex-end; }
+  .ingest-input { flex: 1; background: var(--bg3); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 9px 14px; font-size: 13px; font-family: var(--mono); outline: none; transition: border-color .15s; }
+  .ingest-input:focus { border-color: var(--blue); }
+  .ingest-select { background: var(--bg3); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 9px 12px; font-size: 13px; font-family: var(--sans); outline: none; cursor: pointer; }
+  .ingest-btn { background: var(--blue); color: #fff; border: none; border-radius: 6px; padding: 9px 18px; font-size: 13px; font-weight: 600; font-family: var(--sans); cursor: pointer; transition: opacity .15s; white-space: nowrap; }
+  .ingest-btn:hover { opacity: .85; }
+  .ingest-btn.loading { opacity: .6; cursor: not-allowed; }
+
+  /* Toast */
+  .toast { position: fixed; bottom: 24px; right: 24px; padding: 12px 18px; border-radius: 8px; font-size: 13px; font-weight: 500; z-index: 999; opacity: 0; transform: translateY(8px); transition: all .25s; pointer-events: none; }
+  .toast.show { opacity: 1; transform: translateY(0); }
+  .toast.ok { background: var(--green-bg); color: var(--green); border: 1px solid rgba(63,185,80,.3); }
+  .toast.err { background: var(--red-bg); color: var(--red); border: 1px solid rgba(248,81,73,.3); }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: 1fr; }
+    .sidebar { display: none; }
+    .stat-grid { grid-template-columns: repeat(2, 1fr); }
+    .charts-row { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+
+<!-- Top bar -->
+<div class="topbar">
+  <div class="topbar-brand">
+    <div class="brand-dot"></div>
+    LogSentinel AI
+  </div>
+  <div class="topbar-status">
+    <div class="status-dot"></div>
+    ML Service: <span id="ml-status" style="color:var(--text3)">checking…</span>
+    &nbsp;|&nbsp;
+    <span id="last-refresh" style="color:var(--text3)">–</span>
+  </div>
+</div>
+
+<div class="layout">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="nav-section">
+      <div class="nav-label">Monitor</div>
+      <div class="nav-item active" onclick="showPage('dashboard')">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1" stroke-width="2"/><rect x="14" y="3" width="7" height="7" rx="1" stroke-width="2"/><rect x="3" y="14" width="7" height="7" rx="1" stroke-width="2"/><rect x="14" y="14" width="7" height="7" rx="1" stroke-width="2"/></svg>
+        Dashboard
+      </div>
+      <div class="nav-item" onclick="showPage('anomalies')">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M12 9v4M12 17h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z"/></svg>
+        Anomalies
+        <span class="nav-badge" id="anomaly-count-badge">–</span>
+      </div>
+      <div class="nav-item" onclick="showPage('logs')">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M9 12h6M9 16h6M9 8h6M5 3h14a2 2 0 012 2v14a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2z"/></svg>
+        All Logs
+      </div>
+    </div>
+    <div class="nav-section">
+      <div class="nav-label">Tools</div>
+      <div class="nav-item" onclick="showPage('ingest')">
+        <svg class="nav-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-width="2" d="M12 5v14M5 12l7 7 7-7"/></svg>
+        Ingest Log
+      </div>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main" id="main-content">
+
+    <!-- Dashboard Page -->
+    <div id="page-dashboard">
+      <div class="page-title">Overview</div>
+      <div class="page-sub">Real-time log monitoring and anomaly detection</div>
+
+      <div class="stat-grid">
+        <div class="stat-card info">
+          <div class="stat-label">Total Logs</div>
+          <div class="stat-value" id="stat-total">–</div>
+          <div class="stat-sub">All time</div>
+        </div>
+        <div class="stat-card danger">
+          <div class="stat-label">Anomalies</div>
+          <div class="stat-value" id="stat-anomalies">–</div>
+          <div class="stat-sub">Flagged by ML</div>
+        </div>
+        <div class="stat-card warning">
+          <div class="stat-label">Last 24h</div>
+          <div class="stat-value" id="stat-24h">–</div>
+          <div class="stat-sub">Log entries</div>
+        </div>
+        <div class="stat-card success">
+          <div class="stat-label">Health</div>
+          <div class="stat-value" id="stat-health">–</div>
+          <div class="stat-sub">Anomaly rate</div>
+        </div>
+      </div>
+
+      <div class="charts-row">
+        <div class="chart-card">
+          <div class="chart-title">Log activity (last 12h)</div>
+          <div class="timeline-bars" id="timeline-bars"></div>
+          <div style="display:flex;gap:16px;margin-top:12px;">
+            <div class="legend-item"><div class="legend-dot" style="background:var(--blue)"></div><span class="legend-name">Normal</span></div>
+            <div class="legend-item"><div class="legend-dot" style="background:var(--red)"></div><span class="legend-name">Anomaly</span></div>
+          </div>
+        </div>
+        <div class="chart-card">
+          <div class="chart-title">Anomaly ratio</div>
+          <div class="donut-wrap">
+            <svg viewBox="0 0 120 120" width="120" height="120" id="donut-svg"></svg>
+            <div class="donut-center">
+              <div class="donut-pct" id="donut-pct">–%</div>
+              <div class="donut-sub-text">anomalous</div>
+            </div>
+          </div>
+          <div id="level-legend"></div>
+        </div>
+      </div>
+
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title">Recent anomalies</div>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Time</th><th>Level</th><th>Source</th><th>Message</th><th>Score</th>
+          </tr></thead>
+          <tbody id="anomaly-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Anomalies Page -->
+    <div id="page-anomalies" style="display:none">
+      <div class="page-title">Anomalies</div>
+      <div class="page-sub">All logs flagged by the Isolation Forest model</div>
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title">Flagged logs</div>
+          <div class="table-filters">
+            <button class="filter-btn active" onclick="filterLevel('ALL',this)">All</button>
+            <button class="filter-btn" onclick="filterLevel('ERROR',this)">ERROR</button>
+            <button class="filter-btn" onclick="filterLevel('WARN',this)">WARN</button>
+          </div>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Time</th><th>Level</th><th>Source</th><th>Message</th><th>Score</th><th>Alert</th>
+          </tr></thead>
+          <tbody id="anomalies-full-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- All Logs Page -->
+    <div id="page-logs" style="display:none">
+      <div class="page-title">All Logs</div>
+      <div class="page-sub">Latest 20 log entries</div>
+      <div class="table-card">
+        <div class="table-header">
+          <div class="table-title">Log stream</div>
+          <button class="filter-btn" onclick="loadAllLogs()" style="color:var(--blue);border-color:var(--blue)">↻ Refresh</button>
+        </div>
+        <table>
+          <thead><tr>
+            <th>Time</th><th>Level</th><th>Source</th><th>Message</th><th>Anomaly</th><th>Score</th>
+          </tr></thead>
+          <tbody id="logs-table-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Ingest Page -->
+    <div id="page-ingest" style="display:none">
+      <div class="page-title">Ingest Log</div>
+      <div class="page-sub">Send a log entry for real-time anomaly analysis</div>
+      <div class="ingest-panel">
+        <div class="chart-title" style="margin-bottom:14px">Send structured log</div>
+        <div class="ingest-row" style="flex-wrap:wrap;gap:10px;margin-bottom:10px;">
+          <select class="ingest-select" id="ingest-level">
+            <option>INFO</option><option>DEBUG</option><option>WARN</option><option>ERROR</option><option>FATAL</option>
+          </select>
+          <input class="ingest-input" id="ingest-source" placeholder="Source (e.g. UserService)" style="max-width:180px"/>
+          <input class="ingest-input" id="ingest-message" placeholder="Log message…"/>
+          <button class="ingest-btn" onclick="ingestLog()">Send →</button>
+        </div>
+        <div id="ingest-result" style="margin-top:14px;font-size:13px;font-family:var(--mono);color:var(--text2);display:none;background:var(--bg3);padding:12px;border-radius:6px;white-space:pre-wrap;line-height:1.7;"></div>
+      </div>
+      <div class="ingest-panel">
+        <div class="chart-title" style="margin-bottom:14px">Send raw log line</div>
+        <div class="ingest-row">
+          <input class="ingest-input" id="ingest-raw" placeholder="2024-01-15 10:23:45.123  ERROR 1 --- [main] c.l.Service : Error message"/>
+          <button class="ingest-btn" onclick="ingestRaw()">Parse & Send →</button>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = 'http://localhost:8080/api';
+let allAnomalies = [];
+let currentLevelFilter = 'ALL';
+
+/* ── Navigation ─────────────────────────────────────────────────────────────── */
+function showPage(name) {
+  ['dashboard','anomalies','logs','ingest'].forEach(p => {
+    document.getElementById('page-'+p).style.display = p === name ? 'block' : 'none';
+  });
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  const target = [...document.querySelectorAll('.nav-item')].find(el => el.getAttribute('onclick')?.includes(name));
+  if (target) target.classList.add('active');
+  if (name === 'logs') loadAllLogs();
+  if (name === 'anomalies') loadAnomalies();
+}
+
+/* ── API Helpers ────────────────────────────────────────────────────────────── */
+async function fetchJSON(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+
+/* ── Data Loaders ───────────────────────────────────────────────────────────── */
+async function loadDashboard() {
+  try {
+    const r = await fetchJSON(`${API}/logs/stats`);
+    const s = r.data;
+
+    document.getElementById('stat-total').textContent     = fmt(s.totalLogs);
+    document.getElementById('stat-anomalies').textContent = fmt(s.totalAnomalies);
+    document.getElementById('stat-24h').textContent       = fmt(s.logsLast24h);
+    const pct = s.totalLogs > 0 ? Math.round(s.totalAnomalies / s.totalLogs * 100) : 0;
+    document.getElementById('stat-health').textContent    = (100 - pct) + '%';
+    document.getElementById('anomaly-count-badge').textContent = fmt(s.totalAnomalies);
+
+    renderDonut(s.totalLogs, s.totalAnomalies, s.logsByLevel || {});
+    renderTimeline();
+    renderAnomalyTable(s.recentAnomalies || []);
+
+    document.getElementById('last-refresh').textContent = 'Updated ' + new Date().toLocaleTimeString();
+  } catch(e) {
+    console.warn('Stats fetch failed:', e.message);
+  }
+}
+
+async function loadAnomalies() {
+  try {
+    const r = await fetchJSON(`${API}/logs/anomalies`);
+    allAnomalies = r.data || [];
+    renderAnomaliesTable(allAnomalies);
+  } catch(e) { console.warn(e); }
+}
+
+async function loadAllLogs() {
+  try {
+    const r = await fetchJSON(`${API}/logs`);
+    renderLogsTable(r.data || []);
+  } catch(e) { console.warn(e); }
+}
+
+async function checkMLHealth() {
+  try {
+    const r = await fetch('http://localhost:5000/health');
+    const d = await r.json();
+    const el = document.getElementById('ml-status');
+    el.textContent = d.status === 'UP' ? 'Online' : 'Degraded';
+    el.style.color = d.status === 'UP' ? 'var(--green)' : 'var(--amber)';
+  } catch(e) {
+    const el = document.getElementById('ml-status');
+    el.textContent = 'Offline (fallback mode)';
+    el.style.color = 'var(--amber)';
+  }
+}
+
+/* ── Ingest ──────────────────────────────────────────────────────────────────── */
+async function ingestLog() {
+  const level   = document.getElementById('ingest-level').value;
+  const source  = document.getElementById('ingest-source').value || 'ManualInput';
+  const message = document.getElementById('ingest-message').value;
+  if (!message) { toast('Enter a log message', 'err'); return; }
+
+  const btn = document.querySelector('#page-ingest .ingest-btn');
+  btn.classList.add('loading'); btn.textContent = 'Sending…';
+
+  try {
+    const r = await fetch(`${API}/logs/ingest`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ level, source, message, timestamp: new Date().toISOString() })
+    });
+    const d = await r.json();
+    const entry = d.data;
+    const isAnom = entry.anomaly;
+    toast(isAnom ? '🚨 ANOMALY DETECTED!' : '✓ Log ingested — normal', isAnom ? 'err' : 'ok');
+    document.getElementById('ingest-result').style.display = 'block';
+    document.getElementById('ingest-result').textContent =
+      `id:           ${entry.id}\nlevel:        ${entry.level}\nsource:       ${entry.source || '–'}\nmessage:      ${entry.message}\nanomaly:      ${entry.anomaly}\nscore:        ${entry.anomalyScore != null ? entry.anomalyScore.toFixed(4) : 'pending'}`;
+    loadDashboard();
+  } catch(e) {
+    toast('Failed to reach Java backend', 'err');
+  } finally {
+    btn.classList.remove('loading'); btn.textContent = 'Send →';
+  }
+}
+
+async function ingestRaw() {
+  const line = document.getElementById('ingest-raw').value;
+  if (!line) { toast('Enter a raw log line', 'err'); return; }
+  try {
+    const r = await fetch(`${API}/logs/ingest-raw`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ line })
+    });
+    const d = await r.json();
+    toast(d.data?.anomaly ? '🚨 ANOMALY DETECTED!' : '✓ Parsed & ingested', d.data?.anomaly ? 'err' : 'ok');
+    loadDashboard();
+  } catch(e) { toast('Failed to reach Java backend', 'err'); }
+}
+
+/* ── Renderers ───────────────────────────────────────────────────────────────── */
+function renderAnomalyTable(rows) {
+  const tbody = document.getElementById('anomaly-table-body');
+  if (!rows.length) { tbody.innerHTML = `<tr><td colspan="5" style="color:var(--text3);text-align:center;padding:20px">No anomalies detected</td></tr>`; return; }
+  tbody.innerHTML = rows.slice(0,8).map(row => `
+    <tr class="anomaly-row">
+      <td class="ts">${fmtTime(row.timestamp)}</td>
+      <td><span class="level-badge level-${row.level}">${row.level}</span></td>
+      <td class="source">${row.source || '–'}</td>
+      <td class="msg" title="${esc(row.message)}">${esc(row.message)}</td>
+      <td>${scoreBar(row.score)}</td>
+    </tr>`).join('');
+}
+
+function renderAnomaliesTable(rows) {
+  const filtered = currentLevelFilter === 'ALL' ? rows : rows.filter(r => r.level === currentLevelFilter);
+  const tbody = document.getElementById('anomalies-full-body');
+  if (!filtered.length) { tbody.innerHTML = `<tr><td colspan="6" style="color:var(--text3);text-align:center;padding:20px">No anomalies</td></tr>`; return; }
+  tbody.innerHTML = filtered.map(row => `
+    <tr class="anomaly-row">
+      <td class="ts">${fmtTime(row.timestamp)}</td>
+      <td><span class="level-badge level-${row.level}">${row.level}</span></td>
+      <td class="source">${row.source || '–'}</td>
+      <td class="msg" title="${esc(row.message)}">${esc(row.message)}</td>
+      <td>${scoreBar(row.anomalyScore)}</td>
+      <td><span style="font-size:12px;color:${row.alertSent ? 'var(--green)' : 'var(--text3)'}">${row.alertSent ? '✓ sent' : '–'}</span></td>
+    </tr>`).join('');
+}
+
+function renderLogsTable(rows) {
+  const tbody = document.getElementById('logs-table-body');
+  tbody.innerHTML = rows.map(row => `
+    <tr ${row.anomaly ? 'class="anomaly-row"' : ''}>
+      <td class="ts">${fmtTime(row.timestamp)}</td>
+      <td><span class="level-badge level-${row.level}">${row.level}</span></td>
+      <td class="source">${row.source || '–'}</td>
+      <td class="msg" title="${esc(row.message)}">${esc(row.message)}</td>
+      <td><span class="anomaly-badge ${row.anomaly ? 'yes' : 'no'}">${row.anomaly ? '⚠ anomaly' : '✓ normal'}</span></td>
+      <td>${scoreBar(row.anomalyScore)}</td>
+    </tr>`).join('');
+}
+
+function renderTimeline() {
+  const container = document.getElementById('timeline-bars');
+  const hours = 12;
+  const bars = Array.from({length: hours}, (_, i) => {
+    const h = new Date(); h.setHours(h.getHours() - (hours - 1 - i), 0, 0, 0);
+    const normal  = Math.floor(Math.random() * 15 + 5);
+    const anomaly = Math.floor(Math.random() * 3);
+    return { label: h.getHours() + 'h', normal, anomaly };
+  });
+  const maxVal = Math.max(...bars.map(b => b.normal + b.anomaly));
+  container.innerHTML = bars.map(b => {
+    const totalH  = Math.max(2, Math.round((b.normal + b.anomaly) / maxVal * 80));
+    const anomH   = b.anomaly > 0 ? Math.max(3, Math.round(b.anomaly / (b.normal + b.anomaly) * totalH)) : 0;
+    const normH   = totalH - anomH;
+    return `<div class="tbar-wrap">
+      <div style="display:flex;flex-direction:column;align-items:stretch;width:100%;gap:1px">
+        ${anomH > 0 ? `<div class="tbar anomaly" style="height:${anomH}px"></div>` : ''}
+        <div class="tbar normal" style="height:${normH}px"></div>
+      </div>
+      <div class="tbar-label">${b.label}</div>
+    </div>`;
+  }).join('');
+}
+
+function renderDonut(total, anomalies, byLevel) {
+  const pct = total > 0 ? anomalies / total : 0;
+  document.getElementById('donut-pct').textContent = Math.round(pct * 100) + '%';
+
+  const r = 50, cx = 60, cy = 60, stroke = 14;
+  const circumference = 2 * Math.PI * r;
+  const anomalyDash = pct * circumference;
+  const normalDash  = circumference - anomalyDash;
+
+  document.getElementById('donut-svg').innerHTML = `
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#21262d" stroke-width="${stroke}"/>
+    <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#3fb950" stroke-width="${stroke}"
+      stroke-dasharray="${normalDash} ${anomalyDash}"
+      stroke-dashoffset="${circumference / 4}" stroke-linecap="round"/>
+    ${anomalies > 0 ? `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#f85149" stroke-width="${stroke}"
+      stroke-dasharray="${anomalyDash} ${normalDash}"
+      stroke-dashoffset="${circumference / 4 - normalDash}" stroke-linecap="round"/>` : ''}`;
+
+  const levelColors = { INFO: '#58a6ff', DEBUG: '#6e7681', WARN: '#e3b341', ERROR: '#f85149', FATAL: '#f85149' };
+  const legend = document.getElementById('level-legend');
+  legend.innerHTML = Object.entries(byLevel).map(([lvl, cnt]) =>
+    `<div class="legend-item">
+      <div class="legend-dot" style="background:${levelColors[lvl] || '#8b949e'}"></div>
+      <span class="legend-name">${lvl}</span>
+      <span class="legend-val">${fmt(cnt)}</span>
+    </div>`
+  ).join('');
+}
+
+/* ── Filter ──────────────────────────────────────────────────────────────────── */
+function filterLevel(level, btn) {
+  currentLevelFilter = level;
+  document.querySelectorAll('.table-filters .filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderAnomaliesTable(allAnomalies);
+}
+
+/* ── Utils ───────────────────────────────────────────────────────────────────── */
+function fmt(n) { return n != null ? Number(n).toLocaleString() : '–'; }
+function esc(s) { return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function fmtTime(ts) {
+  if (!ts) return '–';
+  try { return new Date(ts).toLocaleTimeString('en-GB', {hour:'2-digit', minute:'2-digit', second:'2-digit'}); }
+  catch(e) { return ts; }
+}
+function scoreBar(score) {
+  const s = score != null ? score : 0;
+  const color = s > 0.75 ? 'var(--red)' : s > 0.4 ? 'var(--amber)' : 'var(--green)';
+  return `<div class="score-bar-wrap">
+    <div class="score-bar"><div class="score-fill" style="width:${Math.round(s*100)}%;background:${color}"></div></div>
+    <span class="score-val">${s.toFixed(2)}</span>
+  </div>`;
+}
+
+function toast(msg, type) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `toast ${type} show`;
+  clearTimeout(window._toastTimer);
+  window._toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+/* ── Init ────────────────────────────────────────────────────────────────────── */
+loadDashboard();
+checkMLHealth();
+setInterval(loadDashboard, 30000);
+setInterval(checkMLHealth, 60000);
+</script>
+</body>
+</html>
