@@ -6,7 +6,6 @@
 <title>Log Anomaly Detection — Dashboard</title>
 <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet"/>
 <style>
-  /* (your existing CSS – unchanged, keep as is) */
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   :root {
     --bg:        #0d1117;
@@ -307,8 +306,8 @@
 // ========== UPDATE THESE URLs WHEN YOUR SERVICES ARE LIVE ==========
 // Python ML service (already live)
 const ML_SERVICE_URL = 'https://ai-powered-log-anomaly-detection-system.onrender.com';
-// Java backend – replace with your Render URL after deployment
-const API_BASE_URL = 'https://java-backend.onrender.com';   // <-- CHANGE THIS
+// Java backend – live Render URL
+const API_BASE_URL = 'https://java-backend-oxoa.onrender.com';
 // ===================================================================
 
 const API = `${API_BASE_URL}/api`;
@@ -442,7 +441,7 @@ function renderAnomalyTable(rows) {
       <td class="source">${row.source || '–'}</td>
       <td class="msg" title="${esc(row.message)}">${esc(row.message)}</td>
       <td>${scoreBar(row.score)}</td>
-     </tr>`).join('');
+    </tr>`).join('');
 }
 
 function renderAnomaliesTable(rows) {
@@ -457,7 +456,7 @@ function renderAnomaliesTable(rows) {
       <td class="msg" title="${esc(row.message)}">${esc(row.message)}</td>
       <td>${scoreBar(row.anomalyScore)}</td>
       <td><span style="font-size:12px;color:${row.alertSent ? 'var(--green)' : 'var(--text3)'}">${row.alertSent ? '✓ sent' : '–'}</span></td>
-     </tr>`).join('');
+    </tr>`).join('');
 }
 
 function renderLogsTable(rows) {
@@ -470,7 +469,7 @@ function renderLogsTable(rows) {
       <td class="msg" title="${esc(row.message)}">${esc(row.message)}</td>
       <td><span class="anomaly-badge ${row.anomaly ? 'yes' : 'no'}">${row.anomaly ? '⚠ anomaly' : '✓ normal'}</span></td>
       <td>${scoreBar(row.anomalyScore)}</td>
-     </tr>`).join('');
+    </tr>`).join('');
 }
 
 function renderTimeline() {
