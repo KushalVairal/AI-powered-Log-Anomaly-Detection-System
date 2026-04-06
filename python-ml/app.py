@@ -10,6 +10,7 @@ POST /predict/batch  — classify a batch of log entries
 GET  /health         — service health check
 GET  /model/info     — model metadata
 POST /model/retrain  — retrain model on fresh data
+GET  /               — service information
 """
 
 import os
@@ -270,6 +271,22 @@ def _build_reason(log: dict, features: list, is_anomaly: bool) -> str:
         reasons.append("weekend activity")
 
     return "; ".join(reasons) if reasons else "statistical outlier"
+
+
+# ── Root route for service info ────────────────────────────────────────────────
+@app.route("/", methods=["GET"])
+def home():
+    return jsonify({
+        "service": "AI-powered Log Anomaly Detection ML Service",
+        "status": "running",
+        "endpoints": [
+            "GET /health",
+            "GET /model/info",
+            "POST /predict",
+            "POST /predict/batch",
+            "POST /model/retrain"
+        ]
+    })
 
 
 # ── Entry Point ────────────────────────────────────────────────────────────────
